@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>TuneGlobe | Explore live radio on the map</title>
+<link rel="icon" type="image/svg+xml" href="logo.svg" />
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <img src="logo.svg" alt="" class="brand-logo" width="28" height="28" />
+      Tune<span class="accent">Globe</span>
+    </div>
+    <div class="search-wrap">
+      <input id="search-input" type="search" placeholder="Search stations by name, country or tag..." />
+      <button id="search-clear" title="Clear">&times;</button>
+    </div>
+    <div class="filters">
+      <select id="filter-country"><option value="">All countries</option></select>
+      <select id="filter-genre"><option value="">All genres</option></select>
+    </div>
+    <button id="btn-premium" class="btn-premium" title="Upgrade to Premium">⭐ Premium</button>
+    <button id="btn-theme" title="Toggle light / dark theme">🌙</button>
+    <div id="auth-area" class="auth-area">
+      <button id="btn-signin" title="Sign in with Google">
+        <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" alt="" width="18" height="18" />
+        Sign in
+      </button>
+      <button id="btn-account" class="account-btn hidden" title="Account">
+        <img id="account-avatar" class="account-avatar" src="" alt="" width="28" height="28" />
+      </button>
+    </div>
+  </header>
+
+  <div id="account-menu" class="account-menu hidden">
+    <div id="account-name" class="account-menu-name">—</div>
+    <div id="account-plan" class="account-menu-plan">Free plan</div>
+    <button id="btn-open-premium" type="button">Manage / Upgrade</button>
+    <button id="btn-signout" type="button">Sign out</button>
+  </div>
+
+  <div id="premium-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Go Premium</h2>
+        <button id="premium-close" type="button">&times;</button>
+      </div>
+      <p class="modal-sub">Unlock unlimited favorites and support TuneGlobe.</p>
+      <div class="plans">
+        <div class="plan-card" data-plan="monthly">
+          <div class="plan-name">Monthly</div>
+          <div class="plan-price">₹49<span>/mo</span></div>
+          <button type="button" class="plan-btn" data-plan="monthly">Subscribe</button>
+        </div>
+        <div class="plan-card featured" data-plan="quarterly">
+          <div class="plan-badge">Best value</div>
+          <div class="plan-name">3 Months</div>
+          <div class="plan-price">₹99<span>/3mo</span></div>
+          <button type="button" class="plan-btn" data-plan="quarterly">Subscribe</button>
+        </div>
+        <div class="plan-card" data-plan="yearly">
+          <div class="plan-name">1 Year</div>
+          <div class="plan-price">₹599<span>/yr</span></div>
+          <button type="button" class="plan-btn" data-plan="yearly">Subscribe</button>
+        </div>
+      </div>
+      <div id="premium-status" class="premium-status"></div>
+    </div>
+  </div>
+
+  <div id="episodes-modal" class="modal-overlay hidden">
+    <div class="modal episodes-modal">
+      <div class="modal-header">
+        <h2 id="episodes-modal-title">Episodes</h2>
+        <button id="episodes-modal-close" type="button">&times;</button>
+      </div>
+      <div id="episodes-modal-body" class="episodes-modal-body"></div>
+    </div>
+  </div>
+
+  <nav class="sidenav">
+    <button class="nav-btn active" data-view="explore" title="Explore">
+      <span class="icon">🌐</span><span>Explore</span>
+    </button>
+    <button class="nav-btn" data-view="favorites" title="Favorites">
+      <span class="icon">♥</span><span>Favorites</span>
+    </button>
+    <button class="nav-btn" data-view="list" title="Station List">
+      <span class="icon">☰</span><span>List</span>
+    </button>
+    <button class="nav-btn" data-view="podcasts" title="Podcasts">
+      <span class="icon">🎙️</span><span>Podcasts</span>
+    </button>
+  </nav>
+
+  <main id="map"></main>
+  <div id="podcast-grid-view" class="podcast-grid-view hidden">
+    <div id="podcast-grid-body" class="podcast-grid"></div>
+    <div id="podcast-grid-pagination" class="podcast-grid-pagination">
+      <button id="podcast-grid-prev" type="button">‹ Prev</button>
+      <span id="podcast-grid-page-label">Page 1 of 1</span>
+      <button id="podcast-grid-next" type="button">Next ›</button>
+    </div>
+  </div>
+
+  <div id="status-badge">Loading stations…</div>
+
+  <aside id="side-panel" class="hidden">
+    <div class="panel-header">
+      <h2 id="panel-title">Favorites</h2>
+      <button id="panel-close">&times;</button>
+    </div>
+    <div id="panel-body" class="panel-body"></div>
+  </aside>
+
+  <section id="player-bar">
+    <div class="now-playing">
+      <div id="np-name">Choose a station</div>
+      <div id="np-sub">Click a pin on the map to start listening</div>
+    </div>
+    <div class="controls">
+      <button id="btn-prev" title="Previous">⏮</button>
+      <button id="btn-play" title="Play">▶</button>
+      <button id="btn-next" title="Next">⏭</button>
+      <button id="btn-mute" title="Mute">🔊</button>
+      <input id="volume" type="range" min="0" max="1" step="0.01" value="0.8" />
+      <button id="btn-fav" title="Favorite">♡</button>
+    </div>
+  </section>
+
+  <audio id="audio" preload="none"></audio>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-functions-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="firebase-config.js"></script>
+<script src="auth.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Subscription fields (subscriptionStatus, plan, currentPeriodEnd,
+    // lastPaymentId, lastOrderId) are only ever written by the Cloud
+    // Functions above via the Admin SDK, which bypasses these rules
+    // entirely. Clients may only read their own document and create it
+    // once on first sign-in with a safe "free" default — never update it
+    // directly, so nobody can grant themselves Premium from the browser
+    // console.
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.data.subscriptionStatus == 'free'
+        && request.resource.data.plan == null;
+
+      allow update, delete: if false;
+    }
+  }
+}

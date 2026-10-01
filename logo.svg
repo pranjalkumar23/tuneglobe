@@ -1,0 +1,16 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="tg-globe" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff2e6d"/>
+      <stop offset="100%" stop-color="#c31857"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#tg-globe)"/>
+  <g stroke="#ffffff" stroke-width="1.6" fill="none" opacity="0.85">
+    <ellipse cx="32" cy="32" rx="30" ry="12"/>
+    <ellipse cx="32" cy="32" rx="14" ry="30"/>
+    <line x1="2" y1="32" x2="62" y2="32"/>
+  </g>
+  <circle cx="32" cy="32" r="15" fill="#0b0c10" opacity="0.35"/>
+  <path d="M27 22 L45 32 L27 42 Z" fill="#ffffff"/>
+</svg>
