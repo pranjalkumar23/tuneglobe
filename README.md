@@ -2,6 +2,8 @@
 
 Explore and stream live radio stations from anywhere in the world on an interactive map.
 
+**Live at [tuneglobe.netlify.app](https://tuneglobe.netlify.app/)**
+
 ## What it does
 
 - Drop a pin anywhere on a world map and stream that region's live radio stations instantly.
@@ -17,15 +19,10 @@ Explore and stream live radio stations from anywhere in the world on an interact
 - Firebase Cloud Functions for Razorpay order creation and payment verification
 - Firestore security rules locking data down per-user
 
-## Setup
+## Running your own instance
 
-This repo ships with placeholder config (`firebase-config.js`, `.firebaserc`) — it won't run until
-you connect your own Firebase and Razorpay accounts. See [SETUP.md](SETUP.md) for the full
-step-by-step (Firebase project creation, Firestore rules deploy, Cloud Functions secrets, Razorpay
-test vs. live mode).
-
-## Why no live demo
-
-The map and station browsing are static, but accounts and subscriptions depend on Firebase Cloud
-Functions and a configured Razorpay account — there's no backend to run on GitHub Pages. The
-source here is the full implementation; SETUP.md covers standing up your own instance.
+This repo ships with placeholder config (`firebase-config.js`, `.firebaserc`) in the
+committed source — the live deployment above uses its own real Firebase and Razorpay
+credentials, kept out of version control. See [SETUP.md](SETUP.md) for the full step-by-step
+(Firebase project creation, Firestore rules deploy, Cloud Functions secrets, Razorpay test vs.
+live mode) if you want to stand up your own copy.
