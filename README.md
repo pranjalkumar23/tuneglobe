@@ -2,7 +2,7 @@
 
 Explore and stream live radio stations from anywhere in the world on an interactive map.
 
-**Live at [tuneglobe.netlify.app](https://tuneglobe.netlify.app/)**
+**Live at [tuneglobe.pranjal.ai](https://tuneglobe.pranjal.ai/)**
 
 ## What it does
 
