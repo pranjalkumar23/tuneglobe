@@ -1,6 +1,7 @@
 const API_BASE = 'https://de1.api.radio-browser.info/json/stations/search';
 const FAVORITES_KEY = 'radioatlas.favorites';
 const THEME_KEY = 'radioatlas.theme';
+const DEAD_STATIONS_KEY = 'radioatlas.deadStations';
 const btnTheme = document.getElementById('btn-theme');
 
 const audio = document.getElementById('audio');
@@ -271,15 +272,110 @@ async function loadStations() {
     // certs), which browsers refuse to connect to regardless, so those show
     // up in the list but fail with "Could not connect to this station" the
     // moment you click them. Filter those out too.
-    allStations = data.filter(s => s.geo_lat && s.geo_long && s.url_resolved && !s.ssl_error);
+    const deadIds = getDeadStationIds();
+    allStations = data.filter(s =>
+      s.geo_lat && s.geo_long && s.url_resolved && !s.ssl_error && !deadIds.has(s.stationuuid)
+    );
     filteredStations = allStations;
     populateFilters();
     renderMarkers(filteredStations);
     statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
+    sweepDeadStations();
   } catch (err) {
     statusBadge.textContent = 'Could not load stations. Try again shortly.';
     console.error(err);
   }
+}
+
+// --- Background reachability sweep ---------------------------------------
+// The directory's own health check (hidebroken) and ssl_error flag catch
+// most dead stations, but some fail only when a real browser tries to
+// connect (e.g. went offline since the directory's last check). Confirmed
+// dead stations are remembered in localStorage so they stay excluded on
+// future visits without re-probing. Runs in the background after the map
+// is already interactive — never blocks initial load.
+function getDeadStationIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(DEAD_STATIONS_KEY) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+function markStationDead(uuid) {
+  const dead = getDeadStationIds();
+  dead.add(uuid);
+  try {
+    localStorage.setItem(DEAD_STATIONS_KEY, JSON.stringify([...dead]));
+  } catch {
+    // ignore (private browsing / storage full)
+  }
+}
+
+// Uses a throwaway <audio> element rather than fetch() — fetch requires the
+// stream's server to send CORS headers, which almost none of these do, so
+// it would wrongly flag most *working* stations as unreachable. <audio>
+// playback doesn't have that restriction, matching how the real player
+// connects.
+function probeStation(station, timeoutMs = 7000) {
+  return new Promise((resolve) => {
+    const probe = new Audio();
+    probe.muted = true;
+    probe.preload = 'auto';
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      probe.removeAttribute('src');
+      try { probe.load(); } catch { /* ignore */ }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), timeoutMs);
+    probe.addEventListener('error', () => finish(false));
+    probe.addEventListener('loadeddata', () => finish(true));
+    probe.addEventListener('canplay', () => finish(true));
+    try {
+      probe.src = station.url_resolved;
+      probe.load();
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+async function sweepDeadStations() {
+  // Only the stations that can actually show up as markers (renderMarkers
+  // caps at 1500) are worth probing — the long tail beyond that isn't
+  // visible/clickable anyway.
+  const queue = filteredStations.slice(0, 1500).slice();
+  const concurrency = 6;
+  let removedSinceRender = 0;
+
+  async function worker() {
+    while (queue.length) {
+      const station = queue.shift();
+      if (!station) continue;
+      // Skip whatever's currently playing — no need to second-guess a
+      // stream that's already proven itself by actually playing.
+      if (currentStation && currentStation.stationuuid === station.stationuuid) continue;
+      const ok = await probeStation(station);
+      if (!ok) {
+        markStationDead(station.stationuuid);
+        allStations = allStations.filter(s => s.stationuuid !== station.stationuuid);
+        filteredStations = filteredStations.filter(s => s.stationuuid !== station.stationuuid);
+        removedSinceRender++;
+        if (removedSinceRender >= 15) {
+          removedSinceRender = 0;
+          renderMarkers(filteredStations);
+          statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
+        }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, worker));
+  renderMarkers(filteredStations);
+  statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
 }
 
 function populateFilters() {
