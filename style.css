@@ -61,6 +61,12 @@ html, body {
 }
 
 .brand {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.brand-row {
   font-weight: 800;
   letter-spacing: 1px;
   font-size: 18px;
@@ -71,6 +77,13 @@ html, body {
 }
 .brand-logo { border-radius: 50%; flex-shrink: 0; }
 .brand .accent { color: var(--accent); }
+.brand-byline {
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+  padding-left: 36px;
+}
 
 .search-wrap {
   flex: 1;
