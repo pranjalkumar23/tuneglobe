@@ -507,6 +507,23 @@ searchClear.addEventListener('click', () => {
 countryFilter.addEventListener('change', applyFilters);
 genreFilter.addEventListener('change', applyFilters);
 
+// Picking a country rotates the globe to face it, using that country's most
+// popular station as the point to fly to (allStations is sorted by
+// clickcount, so the first match is a good representative — a simple lat/lng
+// average could land in the ocean for wide or antimeridian-spanning
+// countries like Russia, the US, or Fiji).
+countryFilter.addEventListener('change', () => {
+  const country = countryFilter.value;
+  if (country) {
+    const rep = allStations.find(s => s.country === country);
+    if (rep) {
+      map.flyTo({ center: [rep.geo_long, rep.geo_lat], zoom: Math.max(map.getZoom(), 3), speed: 0.8 });
+    }
+  } else {
+    map.flyTo({ center: [10, 30], zoom: 1.5, speed: 0.8 });
+  }
+});
+
 function applyFilters() {
   const q = searchInput.value.trim().toLowerCase();
   const country = countryFilter.value;

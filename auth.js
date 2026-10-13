@@ -152,7 +152,7 @@ document.querySelectorAll('.plan-btn').forEach((btn) => {
 
 async function startCheckout(plan) {
   if (!firebaseReady) {
-    premiumStatus.textContent = 'Sign-in is not configured yet — see SETUP.md.';
+    premiumStatus.textContent = 'Personalized experience and premium features are coming soon.';
     return;
   }
   if (!currentUser) {
