@@ -51,6 +51,12 @@ const FREE_FAVORITES_LIMIT = 5;
 function isPremiumUser() {
   return Boolean(window.TuneGlobe?.Auth?.isPremium());
 }
+// The free-tier cap only makes sense while premium is actually purchasable —
+// sign-in/premium are hidden until a real Firebase project is configured
+// (see auth.js), so there's nothing to upsell to and the cap is pointless.
+function isPremiumGateActive() {
+  return Boolean(window.TuneGlobe?.Auth?.isConfigured());
+}
 // Returns false (and prompts to upgrade) if a free user is already at the
 // favorites cap and is trying to add a new one — removing an existing
 // favorite is always allowed regardless of plan.
@@ -62,7 +68,7 @@ function toggleFavorite(station) {
     saveFavorites(favs);
     return true;
   }
-  if (!isPremiumUser() && favs.length >= FREE_FAVORITES_LIMIT) {
+  if (isPremiumGateActive() && !isPremiumUser() && favs.length >= FREE_FAVORITES_LIMIT) {
     window.TuneGlobe?.Auth?.openPremiumModal();
     return false;
   }
@@ -634,7 +640,7 @@ panelClose.addEventListener('click', () => {
 function showPanel(title, stations) {
   panelTitle.textContent = title;
   panelBody.innerHTML = '';
-  if (title === 'Favorites' && !isPremiumUser()) {
+  if (title === 'Favorites' && isPremiumGateActive() && !isPremiumUser()) {
     const note = document.createElement('div');
     note.className = 'favorites-limit-note';
     note.innerHTML = `${stations.length}/${FREE_FAVORITES_LIMIT} free favorites used · <button type="button" id="favorites-upgrade-link">Upgrade for unlimited</button>`;

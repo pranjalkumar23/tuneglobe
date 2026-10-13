@@ -40,11 +40,13 @@ if (isConfigured()) {
 } else {
   console.warn(
     'TuneGlobe: firebase-config.js still has placeholder values — sign-in and premium ' +
-    'features are disabled until you fill in a real Firebase project config. See SETUP.md.'
+    'features are hidden until you fill in a real Firebase project config. See SETUP.md.'
   );
-  if (btnSignin) btnSignin.title = 'Sign-in not configured yet (see SETUP.md)';
-  if (btnSignin) btnSignin.disabled = true;
-  if (btnPremium) btnPremium.disabled = true;
+  // Hide rather than just disable — a visible but dead "Sign in" / "Premium"
+  // button reads as broken. These come back on their own once a real
+  // Firebase config is filled in (isConfigured() starts returning true).
+  if (btnSignin) btnSignin.classList.add('hidden');
+  if (btnPremium) btnPremium.classList.add('hidden');
 }
 
 function isPremium() {
@@ -204,4 +206,5 @@ window.TuneGlobe.Auth = {
   getCurrentUser: () => currentUser,
   isPremium,
   openPremiumModal,
+  isConfigured,
 };
