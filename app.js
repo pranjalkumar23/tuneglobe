@@ -266,7 +266,12 @@ async function loadStations() {
     });
     const res = await fetch(`${API_BASE}?${params}`);
     const data = await res.json();
-    allStations = data.filter(s => s.geo_lat && s.geo_long && s.url_resolved);
+    // hidebroken only excludes stations the directory's own reachability
+    // check has already failed — it doesn't catch ssl_error (expired/invalid
+    // certs), which browsers refuse to connect to regardless, so those show
+    // up in the list but fail with "Could not connect to this station" the
+    // moment you click them. Filter those out too.
+    allStations = data.filter(s => s.geo_lat && s.geo_long && s.url_resolved && !s.ssl_error);
     filteredStations = allStations;
     populateFilters();
     renderMarkers(filteredStations);
