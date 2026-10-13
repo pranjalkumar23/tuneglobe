@@ -301,6 +301,7 @@ function renderMarkers(stations) {
     const el = document.createElement('div');
     el.className = 'station-marker';
     el.title = station.name.trim();
+    el.dataset.stationuuid = station.stationuuid;
     if (currentStation && currentStation.stationuuid === station.stationuuid) {
       el.classList.add('playing');
     }
@@ -314,6 +315,18 @@ function renderMarkers(stations) {
     markers.push(marker);
   }
   updateMarkerVisibility();
+}
+
+// Just flips which marker shows the "playing" highlight — swapping stations
+// used to call renderMarkers() and rebuild up to 1500 markers from scratch
+// on every click, which blocked the main thread right when responsiveness
+// mattered most. This only ever touches at most two elements.
+function updatePlayingMarkerHighlight() {
+  for (const marker of markers) {
+    const el = marker.getElement();
+    const isPlayingMarker = !!currentStation && el.dataset.stationuuid === currentStation.stationuuid;
+    el.classList.toggle('playing', isPlayingMarker);
+  }
 }
 
 // Podcasts have no real geo-coordinates, so — unlike radio stations —
@@ -383,7 +396,8 @@ function playStation(station) {
   audio.src = station.url_resolved;
   audio.play().catch(() => {});
   updateNowPlaying();
-  renderMarkers(filteredStations);
+  npSub.textContent = 'Connecting…';
+  updatePlayingMarkerHighlight();
 }
 
 function playEpisode(episode, show, episodeList, episodeIndex) {
@@ -430,6 +444,17 @@ btnPlay.addEventListener('click', () => {
 });
 audio.addEventListener('play', () => { isPlaying = true; btnPlay.textContent = '⏸'; });
 audio.addEventListener('pause', () => { isPlaying = false; btnPlay.textContent = '▶'; });
+// Live streams take a moment to connect/buffer — show that explicitly
+// instead of leaving the player looking frozen until audio actually starts.
+audio.addEventListener('waiting', () => {
+  if (nowPlayingType === 'radio' && currentStation) npSub.textContent = 'Buffering…';
+});
+audio.addEventListener('playing', () => {
+  if (nowPlayingType === 'radio') updateNowPlaying();
+});
+audio.addEventListener('error', () => {
+  if (nowPlayingType === 'radio' && currentStation) npSub.textContent = 'Could not connect to this station';
+});
 
 btnPrev.addEventListener('click', () => stepStation(-1));
 btnNext.addEventListener('click', () => stepStation(1));
