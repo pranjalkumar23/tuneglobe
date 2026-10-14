@@ -117,7 +117,21 @@ function addShadedRelief() {
   }, 'water');
 }
 
-map.on('load', loadStations);
+// Kicked off here (rather than inside the map.on('load') handler below) so
+// the network request starts immediately, overlapping with the map's own
+// style/tile load instead of waiting for it.
+const stationsReady = fetchStations();
+
+map.on('load', async () => {
+  try {
+    await stationsReady;
+  } catch {
+    return; // fetchStations already reported the error to statusBadge
+  }
+  renderMarkers(filteredStations);
+  statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
+  sweepDeadStations();
+});
 
 // The "bright" basemap already ships true earth colors (blue ocean, green/
 // tan land) for the light theme, so light mode just restores those native
@@ -255,7 +269,13 @@ function updateMarkerVisibility() {
   }
 }
 
-async function loadStations() {
+// Fetching the station list (a ~3000-row API response) and loading the map's
+// own style/tiles/globe setup are independent, both-slow operations that
+// used to run back-to-back (fetch only started once map.on('load') fired) —
+// stacking their latency instead of overlapping it. This starts the fetch
+// immediately at script load, in parallel with the map constructor above;
+// whichever finishes first just waits briefly on the other, below.
+async function fetchStations() {
   statusBadge.textContent = 'Loading stations…';
   try {
     const params = new URLSearchParams({
@@ -278,12 +298,10 @@ async function loadStations() {
     );
     filteredStations = allStations;
     populateFilters();
-    renderMarkers(filteredStations);
-    statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
-    sweepDeadStations();
   } catch (err) {
     statusBadge.textContent = 'Could not load stations. Try again shortly.';
     console.error(err);
+    throw err;
   }
 }
 
