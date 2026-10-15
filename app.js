@@ -119,14 +119,22 @@ function addShadedRelief() {
 
 // Kicked off here (rather than inside the map.on('load') handler below) so
 // the network request starts immediately, overlapping with the map's own
-// style/tile load instead of waiting for it.
+// style/tile load instead of waiting for it. If a cache exists, fetchStations
+// populates allStations from it synchronously (before this line returns) —
+// the map.on('load') handler below renders that immediately rather than
+// waiting on the slow network call still running in the background.
 const stationsReady = fetchStations();
 
 map.on('load', async () => {
+  if (allStations.length > 0) {
+    renderMarkers(filteredStations);
+    statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
+  }
   try {
     await stationsReady;
   } catch {
-    return; // fetchStations already reported the error to statusBadge
+    if (allStations.length === 0) return; // fetchStations already reported the error
+    return; // network refresh failed, but what's on screen (from cache) is still fine
   }
   renderMarkers(filteredStations);
   statusBadge.textContent = `${filteredStations.length.toLocaleString()} stations on the map`;
@@ -269,36 +277,84 @@ function updateMarkerVisibility() {
   }
 }
 
-// Fetching the station list (a ~3000-row API response) and loading the map's
-// own style/tiles/globe setup are independent, both-slow operations that
-// used to run back-to-back (fetch only started once map.on('load') fired) —
-// stacking their latency instead of overlapping it. This starts the fetch
-// immediately at script load, in parallel with the map constructor above;
-// whichever finishes first just waits briefly on the other, below.
+// The radio-browser.info API this depends on is, as of writing, down to a
+// single live mirror (all.api.radio-browser.info resolves to just one
+// server) — there's no faster alternative to race, and this one genuinely
+// takes ~2-3s to answer a sorted/filtered query over its full dataset
+// regardless of result size. That latency is real and out of our hands on
+// a cold load. What we *can* do: cache the result so repeat visits render
+// instantly instead of re-paying that cost every time.
+const STATIONS_CACHE_KEY = 'radioatlas.stationsCache';
+const STATIONS_CACHE_TIME_KEY = 'radioatlas.stationsCacheTime';
+const STATIONS_CACHE_MAX_AGE = 24 * 60 * 60 * 1000; // 24h — just a sanity bound, not a freshness guarantee
+
+function loadStationsFromCache() {
+  try {
+    const raw = localStorage.getItem(STATIONS_CACHE_KEY);
+    const ts = Number(localStorage.getItem(STATIONS_CACHE_TIME_KEY) || 0);
+    if (!raw || !ts || Date.now() - ts > STATIONS_CACHE_MAX_AGE) return null;
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+function saveStationsToCache(data) {
+  try {
+    localStorage.setItem(STATIONS_CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(STATIONS_CACHE_TIME_KEY, String(Date.now()));
+  } catch {
+    // ignore (storage full / private browsing)
+  }
+}
+
+// hidebroken only excludes stations the directory's own reachability check
+// has already failed — it doesn't catch ssl_error (expired/invalid certs),
+// which browsers refuse to connect to regardless, so those show up in the
+// list but fail with "Could not connect to this station" the moment you
+// click them. Filter those (and anything our own sweep has found dead)
+// out too. Re-run on every load, cached or fresh, since the dead-station
+// list grows over time independently of when the data was cached.
+function applyStationsData(data) {
+  const deadIds = getDeadStationIds();
+  allStations = data.filter(s =>
+    s.geo_lat && s.geo_long && s.url_resolved && !s.ssl_error && !deadIds.has(s.stationuuid)
+  );
+  filteredStations = allStations;
+  populateFilters();
+}
+
+// Fetching the station list and loading the map's own style/tiles/globe
+// setup are independent, both-slow operations that used to run back-to-back
+// (fetch only started once map.on('load') fired) — stacking their latency
+// instead of overlapping it. This starts the fetch immediately at script
+// load, in parallel with the map constructor above; whichever finishes
+// first just waits briefly on the other, below.
 async function fetchStations() {
-  statusBadge.textContent = 'Loading stations…';
+  // Render from cache immediately (synchronously, before any await below)
+  // if we have one — the map.on('load') handler checks allStations right
+  // after calling this and renders right away without waiting on the
+  // network fetch still running below.
+  const cached = loadStationsFromCache();
+  if (cached) {
+    applyStationsData(cached);
+  } else {
+    statusBadge.textContent = 'Loading stations…';
+  }
+
   try {
     const params = new URLSearchParams({
       has_geo_info: 'true',
       hidebroken: 'true',
       order: 'clickcount',
       reverse: 'true',
-      limit: '3000',
+      limit: '1500', // renderMarkers caps display at 1500 anyway — no point fetching more
     });
     const res = await fetch(`${API_BASE}?${params}`);
     const data = await res.json();
-    // hidebroken only excludes stations the directory's own reachability
-    // check has already failed — it doesn't catch ssl_error (expired/invalid
-    // certs), which browsers refuse to connect to regardless, so those show
-    // up in the list but fail with "Could not connect to this station" the
-    // moment you click them. Filter those out too.
-    const deadIds = getDeadStationIds();
-    allStations = data.filter(s =>
-      s.geo_lat && s.geo_long && s.url_resolved && !s.ssl_error && !deadIds.has(s.stationuuid)
-    );
-    filteredStations = allStations;
-    populateFilters();
+    saveStationsToCache(data);
+    applyStationsData(data);
   } catch (err) {
+    if (cached) return; // already showing cached data — a background refresh failing isn't worth an error message
     statusBadge.textContent = 'Could not load stations. Try again shortly.';
     console.error(err);
     throw err;
