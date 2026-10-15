@@ -1,7 +1,8 @@
 const API_BASE = 'https://de1.api.radio-browser.info/json/stations/search';
 const FAVORITES_KEY = 'radioatlas.favorites';
 const THEME_KEY = 'radioatlas.theme';
-const DEAD_STATIONS_KEY = 'radioatlas.deadStations';
+const DEAD_STATIONS_KEY = 'radioatlas.deadStations.v2'; // v2: see note above getDeadStationIds()
+try { localStorage.removeItem('radioatlas.deadStations'); } catch { /* ignore */ } // drop the old, unbounded v1 list
 const btnTheme = document.getElementById('btn-theme');
 
 const audio = document.getElementById('audio');
@@ -368,18 +369,41 @@ async function fetchStations() {
 // dead stations are remembered in localStorage so they stay excluded on
 // future visits without re-probing. Runs in the background after the map
 // is already interactive — never blocks initial load.
+//
+// IMPORTANT: this list must self-heal. An earlier version stored a flat,
+// never-expiring array and blacklisted a station after a single failed
+// probe — under probe concurrency, a station's own probe competes for
+// bandwidth with several others at once, so transient slowness got
+// misread as "dead" fairly often. Those false positives never went away,
+// and accumulated across every repeat visit until most of the map's
+// stations were wrongly hidden (reported: ~2,700 stations down to ~80).
+// Fixed by (a) expiring entries after a few days so a bad verdict isn't
+// permanent, and (b) requiring two failed attempts, a few seconds apart,
+// before blacklisting at all. DEAD_STATIONS_KEY is also versioned (v2) so
+// anyone with an already-corrupted list from the old logic gets a clean
+// slate automatically, with no action needed on their end.
+const DEAD_STATION_TTL = 3 * 24 * 60 * 60 * 1000; // 3 days
+
 function getDeadStationIds() {
   try {
-    return new Set(JSON.parse(localStorage.getItem(DEAD_STATIONS_KEY) || '[]'));
+    const entries = JSON.parse(localStorage.getItem(DEAD_STATIONS_KEY) || '[]');
+    const now = Date.now();
+    const fresh = entries.filter((e) => now - e.ts < DEAD_STATION_TTL);
+    if (fresh.length !== entries.length) {
+      localStorage.setItem(DEAD_STATIONS_KEY, JSON.stringify(fresh));
+    }
+    return new Set(fresh.map((e) => e.uuid));
   } catch {
     return new Set();
   }
 }
 function markStationDead(uuid) {
-  const dead = getDeadStationIds();
-  dead.add(uuid);
   try {
-    localStorage.setItem(DEAD_STATIONS_KEY, JSON.stringify([...dead]));
+    const entries = JSON.parse(localStorage.getItem(DEAD_STATIONS_KEY) || '[]');
+    const now = Date.now();
+    const fresh = entries.filter((e) => now - e.ts < DEAD_STATION_TTL && e.uuid !== uuid);
+    fresh.push({ uuid, ts: now });
+    localStorage.setItem(DEAD_STATIONS_KEY, JSON.stringify(fresh));
   } catch {
     // ignore (private browsing / storage full)
   }
@@ -389,8 +413,10 @@ function markStationDead(uuid) {
 // stream's server to send CORS headers, which almost none of these do, so
 // it would wrongly flag most *working* stations as unreachable. <audio>
 // playback doesn't have that restriction, matching how the real player
-// connects.
-function probeStation(station, timeoutMs = 7000) {
+// connects. 10s timeout and low sweep concurrency (see below) give a slow
+// but real stream enough room to prove itself without competing too hard
+// with its probe siblings for bandwidth.
+function probeStation(station, timeoutMs = 10000) {
   return new Promise((resolve) => {
     const probe = new Audio();
     probe.muted = true;
@@ -417,12 +443,23 @@ function probeStation(station, timeoutMs = 7000) {
   });
 }
 
+// Require a second failed attempt, a few seconds later, before trusting a
+// "dead" verdict — clears up stations that only looked dead because of a
+// momentary hiccup or probe-bandwidth contention on the first try.
+async function isConfirmedDead(station) {
+  const first = await probeStation(station);
+  if (first) return false;
+  await new Promise((r) => setTimeout(r, 4000));
+  const second = await probeStation(station);
+  return !second;
+}
+
 async function sweepDeadStations() {
   // Only the stations that can actually show up as markers (renderMarkers
   // caps at 1500) are worth probing — the long tail beyond that isn't
   // visible/clickable anyway.
   const queue = filteredStations.slice(0, 1500).slice();
-  const concurrency = 6;
+  const concurrency = 3;
   let removedSinceRender = 0;
 
   async function worker() {
@@ -432,8 +469,8 @@ async function sweepDeadStations() {
       // Skip whatever's currently playing — no need to second-guess a
       // stream that's already proven itself by actually playing.
       if (currentStation && currentStation.stationuuid === station.stationuuid) continue;
-      const ok = await probeStation(station);
-      if (!ok) {
+      const dead = await isConfirmedDead(station);
+      if (dead) {
         markStationDead(station.stationuuid);
         allStations = allStations.filter(s => s.stationuuid !== station.stationuuid);
         filteredStations = filteredStations.filter(s => s.stationuuid !== station.stationuuid);
