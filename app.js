@@ -348,7 +348,15 @@ async function fetchStations() {
       hidebroken: 'true',
       order: 'clickcount',
       reverse: 'true',
-      limit: '1500', // renderMarkers caps display at 1500 anyway — no point fetching more
+      // renderMarkers only ever displays the first 1500 as pins, but the
+      // full fetched set still backs search/country-filter coverage — e.g.
+      // a station in a country whose stations rank outside the top 1500 by
+      // clickcount would otherwise vanish from "All countries" entirely
+      // even though it's reachable. Trimming this to 1500 saved a trivial
+      // amount of time (server-side query cost is roughly fixed regardless
+      // of limit — the real latency fix is the localStorage cache above,
+      // not this), so it's not worth the lost coverage.
+      limit: '3000',
     });
     const res = await fetch(`${API_BASE}?${params}`);
     const data = await res.json();
